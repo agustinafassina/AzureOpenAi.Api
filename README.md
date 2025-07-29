@@ -1,4 +1,4 @@
-## Template.Api.Net9
+## AzureOpenAi.Api
 This folder contains the main API project with all controllers and configurations. It serves as the core application for client interactions.<br>
 This is a copy of Template.Api.Net9.
 
