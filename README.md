@@ -1,5 +1,5 @@
 ## AzureOpenAi.Api
-This folder contains the main API project with all controllers and configurations. It serves as the core application for client interactions.<br>
+This repository contains an API connected to OpenAI, utilizing the GPT Nano model. It enables integration with OpenAI's language capabilities for various applications.<br>
 This is a copy of Template.Api.Net9.
 
 ### Api Diagram

@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using OpenAi.Api.Services;
+using OpenAi.Api.Services.Entities;
 using OpenAi.Api.Services.Implementations;
 using OpenAi.Api.Services.Interfaces;
 
@@ -11,7 +12,17 @@ builder.Services.AddAutoMapper(typeof(OpenAi.Api.Mappers.ContractMapping));
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
-builder.Services.AddTransient<IItemService, ItemService>();
+builder.Services.AddTransient<IOpenAIService, OpenAIService>();
+
+builder.Services.AddCors(options =>
+{
+    options.AddDefaultPolicy(policy =>
+    {
+        policy.WithOrigins("http://localhost:8000")
+              .AllowAnyHeader()
+              .AllowAnyMethod();
+    });
+});
 
 builder.Services.AddAuthentication(options =>
 {
@@ -38,6 +49,7 @@ builder.Services.AddAuthentication(options =>
     };
 });
 
+builder.Services.Configure<OpenAISetting>(configuration.GetSection(nameof(OpenAISetting)));
 
 builder.Services.AddControllers();
 
@@ -55,6 +67,7 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
+app.UseCors();
 app.MapControllers();
 
 app.Run();
