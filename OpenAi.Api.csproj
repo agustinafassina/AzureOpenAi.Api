@@ -7,6 +7,13 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Remove="OpenAi.Api.Tests/**" />
+    <Content Remove="OpenAi.Api.Tests/**" />
+    <EmbeddedResource Remove="OpenAi.Api.Tests/**" />
+    <None Remove="OpenAi.Api.Tests/**" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="AutoMapper" Version="14.0.0" />
     <PackageReference Include="Azure.AI.OpenAI" Version="2.1.0" />
     <PackageReference Include="Azure.Core" Version="1.47.1" />

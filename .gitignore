@@ -4,3 +4,5 @@
 /Template.Unitests/obj
 /Template.Api/bin
 /Template.Api/obj
+obj/
+bin/
