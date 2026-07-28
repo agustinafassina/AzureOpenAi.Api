@@ -84,6 +84,17 @@ dotnet run --project OpenAi.Api.csproj
 
 Abre Swagger en la URL que indique la consola (según `Properties/launchSettings.json`).
 
+## Tests
+El proyecto `OpenAi.Api.Tests` usa **xUnit**, **Moq** y **FluentAssertions**.
+
+```bash
+dotnet test
+```
+
+Cobertura actual:
+- `ChatController`: respuesta `200` con reply y `404` cuando el servicio no devuelve contenido
+- `OpenAIService`: validación de settings nulos o incompletos
+
 ## Docker
 ```bash
 docker build -f Dockerfile -t openai-api .
@@ -100,7 +111,8 @@ Pasa configuración sensible con `-e` o un archivo de entorno; no incluyas clave
 | `Controllers/ChatController.cs` | Endpoint REST de chat |
 | `Services/Implementations/OpenAIService.cs` | Cliente Azure OpenAI y completado de chat |
 | `Services/Entities/OpenAISetting.cs` | Opciones fuertemente tipadas para OpenAI |
+| `OpenAi.Api.Tests/` | Unit tests (xUnit, Moq, FluentAssertions) |
 | `Program.cs` | Pipeline, CORS, JWT, Swagger, DI |
 
 ## Licencia y origen
-Agustina Fassina
+Proyecto personal de Agustina Fassina. Distribuido bajo licencia [MIT](https://opensource.org/licenses/MIT).
