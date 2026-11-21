@@ -1,0 +1,12 @@
+**/bin/
+**/obj/
+.git/
+.vscode/
+.vs/
+OpenAi.Api.Tests/
+*.user
+*.md
+*.png
+azure-pipelines-*.yml
+Dockerfile
+.dockerignore
