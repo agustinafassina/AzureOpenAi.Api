@@ -1,9 +1,9 @@
-/obj
-/bin
-/Template.Unitests/bin
-/Template.Unitests/obj
-/Template.Api/bin
-/Template.Api/obj
-obj/
 bin/
+obj/
+.vs/
 .vscode/
+*.user
+.env
+secrets.json
+appsettings.*.local.json
+TestResults/

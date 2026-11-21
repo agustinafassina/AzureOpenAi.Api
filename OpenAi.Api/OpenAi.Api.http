@@ -1,0 +1,17 @@
+@OpenAi.Api_HostAddress = http://localhost:5142
+# Paste a valid JWT from Auth0App1 or Auth0App2.
+@token = <your-jwt>
+
+POST {{OpenAi.Api_HostAddress}}/api/v1/Chat
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "message": "Hola, ¿cómo estás?"
+}
+
+###
+
+GET {{OpenAi.Api_HostAddress}}/health
+
+###

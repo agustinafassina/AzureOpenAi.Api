@@ -8,15 +8,32 @@ trigger:
 pr: none
 
 pool:
-  vmImage: 'ubuntu-22.04'
+  vmImage: 'ubuntu-latest'
 
 steps:
+- task: UseDotNet@2
+  displayName: Install .NET 10 SDK
+  inputs:
+    packageType: 'sdk'
+    version: '10.x'
+
+- script: dotnet test OpenAi.Api.sln -c Release --logger trx --results-directory $(Agent.TempDirectory)/TestResults
+  displayName: Run unit tests
+
+- task: PublishTestResults@2
+  displayName: Publish test results
+  condition: succeededOrFailed()
+  inputs:
+    testResultsFormat: 'VSTest'
+    testResultsFiles: '$(Agent.TempDirectory)/TestResults/*.trx'
+
 - script: |
     aws ecr get-login-password --region $(AWS_REGION) | docker login --username AWS --password-stdin $(AWS_ACCOUNTID).dkr.ecr.$(AWS_REGION).amazonaws.com
   displayName: 'Login to Aws and ECR'
   env:
-    AWS_ACCESSKEYID: $(AWS_ACCESSKEYID)
-    AWS_SECRETACCESSKEY: $(AWS_SECRETACCESSKEY)
+    # The AWS CLI only reads these exact variable names.
+    AWS_ACCESS_KEY_ID: $(AWS_ACCESSKEYID)
+    AWS_SECRET_ACCESS_KEY: $(AWS_SECRETACCESSKEY)
 
 - task: Bash@3
   displayName: Build app with Docker

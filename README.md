@@ -1,16 +1,27 @@
-# OpenAi.Api (Azure OpenAI)
-API ASP.NET Core que expone un endpoint de chat y llama a **Azure OpenAI** mediante el SDK [`Azure.AI.OpenAI`](https://www.nuget.org/packages/Azure.AI.OpenAI). Basada en el template **Template.Api.Net9** (evolucionada a .NET 10 en el proyecto).
+# OpenAi.Api (Azure OpenAI) 🤖
+API ASP.NET Core (.NET 10) que expone un endpoint de chat y llama a **Azure OpenAI** mediante el SDK [`Azure.AI.OpenAI`](https://www.nuget.org/packages/Azure.AI.OpenAI). Sigue la estructura y convenciones de [TemplateApi.Net10](https://github.com/agustinafassina/TemplateApi.Net10).
 
-## Requisitos
-- [.NET SDK 10](https://dotnet.microsoft.com/download) (coincide con `TargetFramework` en `OpenAi.Api.csproj`)
-- Cuenta de Azure Open AI con un despliegue (deployment) de modelo de chat
+## Requisitos 📋
+- [.NET SDK 10](https://dotnet.microsoft.com/download)
+- Un recurso de Azure OpenAI con un deployment de modelo de chat
+- Un emisor JWT (Auth0 u otro) para llamar al endpoint de chat
 
-> **Docker:** el `Dockerfile` usa imágenes `dotnet/sdk:9.0` y `dotnet/aspnet:9.0`. Si publicas con `net10.0`, conviene alinear las imágenes a la versión 10 para evitar errores de compilación o runtime.
+## Arquitectura 🏗️
+```
+OpenAi.Api         → controllers, validators (FluentValidation), middleware, Program.cs
+OpenAi.Services    → lógica de aplicación (IOpenAIService)
+OpenAi.Repository  → acceso a Azure OpenAI (IChatCompletionRepository, ChatClient)
+OpenAi.Models      → settings y excepciones compartidas
+OpenAi.Api.Tests   → unit tests (xUnit + Moq)
+```
+Dirección de dependencias: `Api → Services → Repository → Models`. Solo `OpenAi.Repository` conoce el SDK de Azure OpenAI; traduce sus errores a `ExternalServiceException`.
 
-## Configuración
+La DI se registra con `AddRepositories(configuration)` y `AddApplicationServices()`. El `ChatClient` es singleton (el SDK está pensado para reutilizarse).
+
+![Diagrama de la API](api-diagram.png)
+
+## Configuración ⚙️
 ### Azure OpenAI
-La sección `OpenAISetting` enlaza endpoint, deployment y clave:
-
 ```json
 "OpenAISetting": {
   "Endpoint": "https://TU-RECURSO.openai.azure.com/",
@@ -18,101 +29,89 @@ La sección `OpenAISetting` enlaza endpoint, deployment y clave:
   "ApiKey": "TU_CLAVE"
 }
 ```
+Los tres valores son obligatorios y se validan **al arrancar**: si falta alguno (o `Endpoint` no es una URL), la app no levanta y el log indica qué campo falta.
 
-En desarrollo, usa **User Secrets** o variables de entorno para no commitear claves:
-
+En desarrollo, guarda la clave con **User Secrets** (el proyecto ya tiene `UserSecretsId`):
 ```bash
-dotnet user-secrets set "OpenAISetting:Endpoint" "https://..."
-dotnet user-secrets set "OpenAISetting:DeploymentName" "..."
-dotnet user-secrets set "OpenAISetting:ApiKey" "..."
+dotnet user-secrets --project OpenAi.Api set "OpenAISetting:ApiKey" "..."
 ```
+Desplegado, usa variables de entorno (`OpenAISetting__ApiKey`) o un secret store (Key Vault / Secrets Manager).
 
-### JWT (Auth0 / emisores propios)
-
-En `Program.cs` están registrados dos esquemas JWT con nombre: `Auth0App1` y `Auth0App2` (issuer y audience desde configuración o variables de entorno con el mismo nombre jerárquico, por ejemplo `Auth0App1__Issuer`).
-
-Ejemplo en `appsettings.*.json`:
+### JWT (Auth0App1 / Auth0App2) 🔐
+**Todos los endpoints requieren un token válido** de cualquiera de los dos emisores (fallback policy). Excepción: `/health`, que es público.
 
 ```json
-"Auth0App1": {
-  "Issuer": "https://tu-dominio.auth0.com/",
-  "Audience": "tu-api-audience"
-},
-"Auth0App2": {
-  "Issuer": "https://otro-emisor/",
-  "Audience": "otra-audience"
-}
+"Auth0App1": { "Issuer": "https://tu-dominio.auth0.com/", "Audience": "tu-api-audience" },
+"Auth0App2": { "Issuer": "https://otro-emisor/", "Audience": "otra-audience" }
 ```
+Variables de entorno equivalentes: `Auth0App1__Issuer`, `Auth0App1__Audience`, etc. Se validan issuer, audience, lifetime y firma (clock skew de 1 minuto). Fuera de Development, el `Issuer` debe ser HTTPS.
 
-Para exigir token en un controlador o acción, usa el atributo `[Authorize]` y el esquema que corresponda, por ejemplo:
+### CORS 🌐
+Orígenes permitidos en `Cors:AllowedOrigins`. Por defecto vacío (nada permitido); en Development se permite `http://localhost:8000`.
 
-```csharp
-[Authorize(AuthenticationSchemes = "Auth0App1")]
-```
+### Rate limiting ⏱️
+El endpoint de chat permite `RateLimiting:Chat:PermitLimit` requests por minuto **por usuario** (default 20), para acotar el gasto en Azure OpenAI. Al superarlo responde `429`.
 
-Hoy el `ChatController` no aplica `[Authorize]`; la autenticación está registrada a nivel de aplicación para cuando quieras proteger rutas concretas.
+## API 📡
+| Método | Ruta | Auth | Cuerpo |
+|--------|------|------|--------|
+| `POST` | `/api/v1/Chat` | Bearer | `{ "message": "tu pregunta" }` (1–4000 caracteres) |
+| `GET` | `/health` | — | — |
 
-### CORS
-Política por defecto que permite origen `http://localhost:8000` (cualquier método y cabecera). Ajusta en `Program.cs` si tu front corre en otro host.
+Respuestas de `POST /api/v1/Chat`:
 
-## API
-### Chat
+| Código | Cuándo |
+|--------|--------|
+| `200` | `{ "reply": "texto generado" }` |
+| `400` | `message` vacío o demasiado largo (ValidationProblemDetails) |
+| `401` | Sin token o token inválido |
+| `429` | Rate limit superado |
+| `502` | Azure OpenAI respondió con error o sin texto |
+| `503` | Azure OpenAI no disponible o con throttling (incluye `Retry-After` si Azure lo envía) |
 
-| Método | Ruta | Cuerpo |
-|--------|------|--------|
-| `POST` | `/api/v1/Chat` | `{ "message": "tu pregunta" }` |
+Todos los errores son **ProblemDetails** con `traceId` para correlacionar con los logs; nunca incluyen mensajes internos. Los logs registran metadata (tokens usados, finish reason), no el contenido de preguntas ni respuestas.
 
-Respuesta exitosa (`200`): `{ "reply": "texto generado" }`. Si el servicio no devuelve contenido, la API responde `404`.
+[OpenAi.Api/OpenAi.Api.http](OpenAi.Api/OpenAi.Api.http) tiene requests de ejemplo.
 
 ### Swagger
-Con `ASPNETCORE_ENVIRONMENT=Development`, Swagger UI está activo. URLs típicas al ejecutar con el perfil del proyecto:
+Solo en Development: `http://localhost:5142/swagger` o `https://localhost:7137/swagger`.
 
-- HTTP: `http://localhost:5142/swagger`
-- HTTPS: `https://localhost:7137/swagger`
-
-## Diagrama
-Arquitectura o flujo de la API (si el archivo está en el repo):
-
-![Diagrama de la API](api-diagram.png)
-
-## Ejecución local
+## Ejecución local ▶️
 ```bash
 dotnet restore
 dotnet build
-dotnet run --project OpenAi.Api.csproj
+dotnet run --project OpenAi.Api
 ```
 
-Abre Swagger en la URL que indique la consola (según `Properties/launchSettings.json`).
-
-## Tests
-El proyecto `OpenAi.Api.Tests` usa **xUnit**, **Moq** y **FluentAssertions**.
+## Tests 🧪
+`OpenAi.Api.Tests` usa **xUnit** y **Moq**. Convención de nombres: `MethodName_Scenario_ExpectedBehavior`.
 
 ```bash
 dotnet test
 ```
 
-Cobertura actual:
-- `ChatController`: respuesta `200` con reply y `404` cuando el servicio no devuelve contenido
-- `OpenAIService`: validación de settings nulos o incompletos
+Cobertura:
+- `AzureOpenAIChatRepository`: respuesta del modelo, contenido vacío, mapeo de errores de Azure (throttling + `Retry-After`, errores 4xx) — con `ChatClient` mockeado
+- `OpenAIService`: reply, reply vacío → `null`, pregunta vacía, propagación de `CancellationToken` y excepciones
+- `ChatController`: `200`, `502` por reply vacío, `400` por validación
+- `QuestionRequestValidator`: requerido y largo máximo
+- `GlobalExceptionHandler`: `503`/`502`/`500`, `Retry-After`, `traceId`, sin fuga de mensajes, cliente desconectado
+- `OpenAISetting`: validación de configuración
 
-## Docker
+## Docker 🐳
 ```bash
-docker build -f Dockerfile -t openai-api .
-docker run -d -p 8787:80 -e ASPNETCORE_ENVIRONMENT=Development --name openai-api openai-api
+docker build -t openai-api .
+docker run -d -p 8787:80 \
+  -e OpenAISetting__Endpoint=https://TU-RECURSO.openai.azure.com/ \
+  -e OpenAISetting__DeploymentName=... \
+  -e OpenAISetting__ApiKey=... \
+  -e Auth0App1__Issuer=... -e Auth0App1__Audience=... \
+  --name openai-api openai-api
 ```
+No incluyas claves en la imagen. No uses `ASPNETCORE_ENVIRONMENT=Development` en entornos desplegados.
 
-Swagger (solo en Development): `http://localhost:8787/swagger/index.html`
+## CI/CD 🚀
+`azure-pipelines-acr.yml` (Azure Container Registry) y `azure-pipelines-ecr.yml` (AWS ECR) corren `dotnet test` y publican los resultados antes de construir y subir la imagen. Si un test falla, no se publica la imagen.
 
-Pasa configuración sensible con `-e` o un archivo de entorno; no incluyas claves en la imagen.
-
-## Estructura relevante
-| Carpeta / archivo | Rol |
-|-------------------|-----|
-| `Controllers/ChatController.cs` | Endpoint REST de chat |
-| `Services/Implementations/OpenAIService.cs` | Cliente Azure OpenAI y completado de chat |
-| `Services/Entities/OpenAISetting.cs` | Opciones fuertemente tipadas para OpenAI |
-| `OpenAi.Api.Tests/` | Unit tests (xUnit, Moq, FluentAssertions) |
-| `Program.cs` | Pipeline, CORS, JWT, Swagger, DI |
-
-## Licencia y origen
+## Licencia 📄
 Proyecto personal de Agustina Fassina. Distribuido bajo licencia [MIT](https://opensource.org/licenses/MIT).
